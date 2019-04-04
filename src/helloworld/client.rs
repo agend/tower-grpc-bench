@@ -11,9 +11,9 @@ extern crate tower_grpc;
 extern crate tower_service;
 extern crate tower_util;
 use tokio::runtime::{Runtime};
-use futures::future::{loop_fn, Loop};
+use futures::future::{loop_fn, Loop, FutureResult};
 
-use futures::{Future, Poll};
+use futures::{Future, Poll, Async};
 use tokio::executor::DefaultExecutor;
 use tokio::net::tcp::{ConnectFuture, TcpStream};
 use tower_grpc::Request;
@@ -67,14 +67,16 @@ struct Dst;
 impl Service<()> for Dst {
     type Response = TcpStream;
     type Error = ::std::io::Error;
-    type Future = ConnectFuture;
+    type Future = Box<Future<Item=TcpStream, Error=::std::io::Error> + Send>;
 
     fn poll_ready(&mut self) -> Poll<(), Self::Error> {
         Ok(().into())
     }
 
     fn call(&mut self, _: ()) -> Self::Future {
-        TcpStream::connect(&([127, 0, 0, 1], 50051).into())
+        Box::new(TcpStream::connect(&([127, 0, 0, 1], 50051).into())
+        .map(|stream| {stream.set_nodelay(true).unwrap(); stream})
+        .map_err(|err| err))
     }
 }
 
